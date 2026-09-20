@@ -1,0 +1,70 @@
+{
+  "entities": {
+    "BlogPost": {
+      "title": "BlogPost",
+      "description": "A blog post written by the admin",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "The title of the blog post"
+        },
+        "content": {
+          "type": "string",
+          "description": "The main content of the blog post in markdown or plain text"
+        },
+        "excerpt": {
+          "type": "string",
+          "description": "A short summary of the blog post"
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "description": "When the post was created"
+        },
+        "updatedAt": {
+          "type": "timestamp",
+          "description": "When the post was last updated"
+        },
+        "authorId": {
+          "type": "string",
+          "description": "The UID of the admin who created the post"
+        },
+        "published": {
+          "type": "boolean",
+          "description": "Whether the post is visible to the public"
+        }
+      },
+      "required": ["title", "content", "createdAt", "authorId", "published"]
+    },
+    "User": {
+      "title": "User",
+      "description": "A user of the application (admin)",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin"]
+        }
+      },
+      "required": ["email", "role"]
+    }
+  },
+  "firestore": {
+    "/posts/{postId}": {
+      "schema": {
+        "$ref": "#/entities/BlogPost"
+      },
+      "description": "Collection of all blog posts"
+    },
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/User"
+      },
+      "description": "Collection of users and their roles"
+    }
+  }
+}

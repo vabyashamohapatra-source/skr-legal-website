@@ -1,0 +1,131 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: posts
+    // Document ID: auto-generated
+    // Fields:
+    //   - title: string (required, < 200 chars)
+    //   - content: string (required, < 100000 chars)
+    //   - excerpt: string (optional, < 500 chars)
+    //   - createdAt: timestamp (required, immutable)
+    //   - updatedAt: timestamp (optional)
+    //   - authorId: string (required, immutable)
+    //   - published: boolean (required)
+    //
+    // Collection: users
+    // Document ID: user UID
+    // Fields:
+    //   - email: string (required)
+    //   - role: string (required, enum: ['admin'])
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+        ((request.auth.token.email == "vabyashamohapatra@gmail.com" || request.auth.token.email == "advsaswatkumarrout@gmail.com") && request.auth.token.email_verified == true)
+      );
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function validStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+
+    function isValidOptionalString(field, minLen, maxLen) {
+      return !(field in request.resource.data) ||
+             (request.resource.data[field] is string &&
+              request.resource.data[field].size() >= minLen &&
+              request.resource.data[field].size() <= maxLen);
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidPost() {
+      return hasOnlyAllowedFields(['title', 'content', 'excerpt', 'createdAt', 'updatedAt', 'authorId', 'published']) &&
+             hasRequiredFields(['title', 'content', 'createdAt', 'authorId', 'published']) &&
+             validStringLength('title', 1, 200) &&
+             validStringLength('content', 1, 100000) &&
+             isValidOptionalString('excerpt', 0, 500) &&
+             request.resource.data.createdAt is timestamp &&
+             (!( 'updatedAt' in request.resource.data ) || request.resource.data.updatedAt is timestamp) &&
+             request.resource.data.authorId is string &&
+             request.resource.data.published is bool;
+    }
+
+    function isValidUser() {
+      return hasOnlyAllowedFields(['email', 'role']) &&
+             hasRequiredFields(['email', 'role']) &&
+             request.resource.data.email is string &&
+             request.resource.data.role in ['admin'];
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /posts/{postId} {
+      // Anyone can read published posts. Admins can read all posts.
+      allow read: if (resource.data.published == true) || isAdmin();
+      
+      // Only admins can create posts. authorId must match their UID.
+      allow create: if isAdmin() && 
+                    isValidPost() && 
+                    request.resource.data.authorId == request.auth.uid;
+      
+      // Only admins can update posts. authorId and createdAt must not change.
+      allow update: if isAdmin() && 
+                    isValidPost() && 
+                    areImmutableFieldsUnchanged(['authorId', 'createdAt']);
+                    
+      // Only admins can delete posts.
+      allow delete: if isAdmin();
+    }
+
+    match /users/{userId} {
+      // Only admins can read user data
+      allow read: if isAdmin() || isOwner(userId);
+      
+      // Only existing admins can create new admins, or the default admin
+      allow create: if isAdmin() && isValidUser() && isOwner(userId);
+      
+      // Only admins can update
+      allow update: if isAdmin() && isValidUser() && areImmutableFieldsUnchanged(['role', 'email']);
+      
+      allow delete: if false;
+    }
+  }
+}
